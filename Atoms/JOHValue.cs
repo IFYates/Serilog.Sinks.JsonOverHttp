@@ -4,6 +4,7 @@ using Serilog.Sinks.JsonOverHttp.Formatting;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace Serilog.Sinks.JsonOverHttp
 {
@@ -11,7 +12,7 @@ namespace Serilog.Sinks.JsonOverHttp
     {
         private readonly static MessageTemplateParser _parser = new();
 
-        private MessageTemplate _template;
+        private readonly MessageTemplate _template;
 
         public JOHValue(string template)
         {
@@ -25,7 +26,26 @@ namespace Serilog.Sinks.JsonOverHttp
                 QuoteOnOpen = true,
                 EmptyIsNull = true
             };
-            _template.Render(properties, writer, formatProvider);
+            foreach (var token in _template.Tokens)
+            {
+                if (token is PropertyToken pt)
+                {
+                    // Skip missing property if optional
+                    if (!properties.TryGetValue(pt.PropertyName, out var prop) && pt.Format?.IndexOf('?') >= 0)
+                    {
+                        continue;
+                    }
+
+                    // HACK: Remove unwanted quotes added by ScalarValue resolution
+                    if (prop is ScalarValue sv)
+                    {
+                        writer.Write(sv.Value);
+                        continue;
+                    }
+                }
+
+                token.Render(properties, writer, formatProvider);
+            }
             if (writer.HasWritten)
             {
                 output.Write('"');

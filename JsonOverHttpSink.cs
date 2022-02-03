@@ -44,6 +44,9 @@ namespace Serilog.Sinks.JsonOverHttp
                     var resp = await sendRequest(uri, req);
                     // TODO: reattempt failures
                     resp.ToString();
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                    }
                 });
                 _requests.Enqueue(task.ContinueWith(cleanQueue));
                 task.Start();

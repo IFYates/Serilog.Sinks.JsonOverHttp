@@ -28,39 +28,35 @@ namespace Serilog.Sinks.JsonOverHttp.Formatting
 
         public HttpContent BuildRequest(LogEvent logEvent, out string uri)
         {
-            // Prepare required information
-            var baseProps = OutputProperties.GetOutputProperties(logEvent);
-            var properties = new Dictionary<string, LogEventPropertyValue>(baseProps)
-            {
-                ["MessageTemplate"] = new ScalarValue(logEvent.MessageTemplate)
-            };
+            var data = OutputProperties.GetOutputProperties(logEvent);
 
-            uri = _uriBuilder.Render(properties);
-
+            // Resolve payload
             var payload = new StringBuilder();
             using var writer = new StringWriter(payload);
-            _config.Body?.Render(logEvent, properties, writer);
-
+            _config.Body?.Render(logEvent, data, writer);
             var content = payload.ToString();
+
+            // Parse as necessary
             if (_config.ValidateBody || _config.FormatBody)
             {
                 using var doc = JsonDocument.Parse(content);
-                using var mem = new MemoryStream();
-                using var jsonWriter = new Utf8JsonWriter(mem, new JsonWriterOptions() { Indented = true });
-                doc.RootElement.WriteTo(jsonWriter);
-                jsonWriter.Flush();
-                content = Encoding.UTF8.GetString(mem.ToArray());
+                if (_config.FormatBody)
+                {
+                    using var mem = new MemoryStream();
+                    using var jsonWriter = new Utf8JsonWriter(mem, new JsonWriterOptions() { Indented = true });
+                    doc.RootElement.WriteTo(jsonWriter);
+                    jsonWriter.Flush();
+                    content = Encoding.UTF8.GetString(mem.ToArray());
+                }
             }
 
             var req = new StringContent(content, Encoding.UTF8, "application/json");
 
-            // Headers
-            if (_headers.Count > 0)
+            // URI and Headers
+            uri = _uriBuilder.Render(data);
+            foreach (var header in _headers)
             {
-                foreach (var header in _headers)
-                {
-                    req.Headers.Add(header.Key, header.Value.Render(properties));
-                }
+                req.Headers.Add(header.Key, header.Value.Render(data));
             }
 
             return req;
