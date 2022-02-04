@@ -4,6 +4,7 @@ using Serilog.Events;
 using Serilog.Sinks.JsonOverHttp.Formatting;
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,7 @@ namespace Serilog.Sinks.JsonOverHttp
     {
         private const uint RETRY_TIMES = 10;
 
+        private bool _disposing = false;
         private readonly CancellationTokenSource _cancellationTokenSource = new();
 
         private readonly DynamicJsonFormatter _formatter;
@@ -36,7 +38,7 @@ namespace Serilog.Sinks.JsonOverHttp
 
         public void Emit(LogEvent logEvent)
         {
-            if (_cancellationTokenSource.IsCancellationRequested)
+            if (_disposing)
             {
                 return;
             }
@@ -50,15 +52,15 @@ namespace Serilog.Sinks.JsonOverHttp
 
             try
             {
-                while (_events.TryTake(out var logEvent, -1, _cancellationTokenSource.Token))
+                while (_events.TryTake(out var logEvent, -1, _cancellationTokenSource.Token) && !_events.IsCompleted)
                 {
-                    var task = new Task(async () =>
+                    var task = Task.Run(async () =>
                     {
                         var req = _formatter.BuildRequest(logEvent, out var uri);
                         await recoverableSend(uri, req);
                     });
-                    _requests.Enqueue(task.ContinueWith(cleanQueue));
-                    task.Start();
+                    _requests.Enqueue(task);
+                    task.ContinueWith(cleanQueue);
                 }
             }
             catch (OperationCanceledException)
@@ -85,10 +87,10 @@ namespace Serilog.Sinks.JsonOverHttp
                 }
                 catch (OperationCanceledException)
                 {
-                    continue;
+                    break;
                 }
 
-                if (resp.IsSuccessStatusCode || _cancellationTokenSource.IsCancellationRequested)
+                if (resp.IsSuccessStatusCode || _disposing)
                 {
                     break;
                 }
@@ -105,15 +107,15 @@ namespace Serilog.Sinks.JsonOverHttp
             }
         }
 
-        private async Task<HttpResponseMessage> sendRequest(string uri, HttpContent req)
+        private Task<HttpResponseMessage> sendRequest(string uri, HttpContent req)
         {
             if (_config.Method.Method == HttpMethod.Post.Method)
             {
-                return await _client.PostAsync(uri, req, _cancellationTokenSource.Token);
+                return _client.PostAsync(uri, req, _cancellationTokenSource.Token);
             }
             if (_config.Method.Method == HttpMethod.Put.Method)
             {
-                return await _client.PutAsync(uri, req, _cancellationTokenSource.Token);
+                return _client.PutAsync(uri, req, _cancellationTokenSource.Token);
             }
             throw new NotImplementedException($"Unhandled HTTP method: {_config.Method.Method}");
         }
@@ -132,13 +134,17 @@ namespace Serilog.Sinks.JsonOverHttp
             }
         }
 
+        private const int DISPOSE_TIMEOUT = 5_000;
         public void Dispose()
         {
             if (!_cancellationTokenSource.IsCancellationRequested)
             {
+                var sw = Stopwatch.StartNew();
+                _events.CompleteAdding();
+                _consumer.Wait(DISPOSE_TIMEOUT);
+                var rem = Math.Max(0, DISPOSE_TIMEOUT - (int)sw.ElapsedMilliseconds);
+                Task.WaitAll(_requests.ToArray(), rem);
                 _cancellationTokenSource.Cancel();
-                var cts = new CancellationTokenSource(30_000);
-                Task.WaitAll(_requests.ToArray(), cts.Token);
                 _client.Dispose();
                 GC.SuppressFinalize(this);
             }
