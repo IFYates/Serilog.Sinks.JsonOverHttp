@@ -3,7 +3,7 @@ using Serilog.Events;
 
 namespace Serilog.Sinks.JsonOverHttp.Enrichers
 {
-    public class MessageTemplate : ILogEventEnricher
+    public class MessageTemplateField : ILogEventEnricher
     {
         public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
         {
