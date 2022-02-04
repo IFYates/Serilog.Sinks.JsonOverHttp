@@ -18,6 +18,6 @@ namespace Serilog.Sinks.JsonOverHttp
         /// <summary>
         /// Send formatted (indented) JSON.
         /// </summary>
-        public bool FormatBody { get; set; } = true;
+        public bool FormatBody { get; set; }
     }
 }
