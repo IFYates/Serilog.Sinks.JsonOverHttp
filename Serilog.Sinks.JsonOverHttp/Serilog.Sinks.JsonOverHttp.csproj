@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net5.0</TargetFramework>
+		<Nullable>enable</Nullable>
+        <Authors>IFYates</Authors>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+		
+        <Version>0.0.1-beta1</Version>
+        <PackageProjectUrl>https://github.com/IFYates/Serilog.Sinks.JsonOverHttp</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/IFYates/Serilog.Sinks.JsonOverHttp</RepositoryUrl>
+        <RepositoryType>GitHub</RepositoryType>
+		<Description>A Serilog sink for sending customisable JSON to an HTTP(S) target.</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Serilog" Version="2.10.0" />
+	</ItemGroup>
+
+</Project>
